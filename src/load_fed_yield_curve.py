@@ -11,9 +11,9 @@ from io import BytesIO
 from pathlib import Path
 import settings
 
-DATA_DIR = settings.DATA_DIR
-START_DATE = settings.START_DATE
-END_DATE = settings.END_DATE
+DATA_DIR = settings.d['DATA_DIR']
+START_DATE = settings.d['START_DATE']
+END_DATE = settings.d['END_DATE']
 
 
 def pull_fed_yield_curve():
