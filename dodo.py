@@ -1,10 +1,9 @@
 """
-dodo.py - 基于 doit 自动化运行项目模块
+dodo.py - Automates project tasks using doit.
 
-该文件依赖于项目中的 config.py（配置路径、日期、用户名等）以及 src 目录下的各个模块：
-Table02Prep.py、Table03.py、Table03Load.py、Table03Analysis.py 等。
-运行时，会依次完成 Table 2 和 Table 3 的数据拉取、处理和报表生成，
-以及可选的 LaTeX 文档编译。
+This file relies on config.py for paths and src/ modules such as:
+Table02Prep.py, Table03.py, Table03Load.py, Table03Analysis.py, etc.
+It runs Table 2 and Table 3 data fetch, processing, and testing.
 """
 
 import os
@@ -13,13 +12,12 @@ import warnings
 import subprocess
 
 from src import config
-
 warnings.filterwarnings("ignore")
 
 def task_table02_main():
     """
-    运行 Table02Prep.py，生成 Table 2 的 LaTeX 表格和图形。
-    分别运行原始版本（UPDATED=False）和更新版本（UPDATED=True）。
+    Runs Table02Prep.py to generate Table 2's LaTeX and figures.
+    Executes both original (UPDATED=False) and updated (UPDATED=True) versions.
     """
     original_dir = os.getcwd()
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -39,10 +37,27 @@ def task_table02_main():
         'verbosity': 2,
     }
 
+def task_test_table02():
+    """
+    Runs the unit tests for Table 02, located in Table02_testing.py.
+    """
+    original_dir = os.getcwd()
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+
+    def run_table02_tests():
+        os.chdir(os.path.join(current_dir, "src"))
+        os.system('python -m unittest Table02_testing.py')
+        os.chdir(original_dir)
+
+    return {
+        'actions': [run_table02_tests],
+        'verbosity': 2,
+    }
+
 def task_table03_main():
     """
-    运行 Table03.py，生成 Table 3 的 LaTeX 表格、摘要统计和图形。
-    分别调用原始版本和更新版本（UPDATED=True）。
+    Runs Table03.py to generate Table 3's LaTeX, summary stats, and figures.
+    Calls both original (UPDATED=False) and updated (UPDATED=True) versions.
     """
     original_dir = os.getcwd()
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -62,10 +77,27 @@ def task_table03_main():
         'verbosity': 2,
     }
 
+def task_test_table03():
+    """
+    Runs the unit tests for Table 03, located in Table03_testing.py.
+    """
+    original_dir = os.getcwd()
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+
+    def run_table03_tests():
+        os.chdir(os.path.join(current_dir, "src"))
+        os.system('python -m unittest Table03_testing.py')
+        os.chdir(original_dir)
+
+    return {
+        'actions': [run_table03_tests],
+        'verbosity': 2,
+    }
+
 def task_pull_fred_data():
     """
-    调用 Table03Load 中的数据拉取函数，更新 FRED 历史数据与 Shiller PE 数据，
-    数据将写入 config.DATA_DIR 指定的目录中。
+    Calls Table03Load functions to update FRED historical data and Shiller PE data,
+    writing outputs to config.DATA_DIR.
     """
     original_dir = os.getcwd()
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -85,28 +117,8 @@ def task_pull_fred_data():
         'verbosity': 2,
     }
 
-def task_compile_latex_docs():
-    """
-    编译 LaTeX 汇总文档生成 PDF 文件。
-    这里假设你在 config.OUTPUT_DIR 下有一个 combined_document.tex 文件，
-    编译后的 PDF 文件将输出到 config.OUTPUT_DIR 中。
-    """
-    tex_directory = Path(config.OUTPUT_DIR)  # 使用配置中定义的 OUTPUT_DIR
-    tex_file = "combined_document.tex"  # 请确保该文件存在于 OUTPUT_DIR 下
-    target_pdf = tex_directory / "report_final.pdf"
+def main():
+    pass
 
-    compile_command = ["latexmk", "-pdf", "-pdflatex=xelatex", tex_file]
-    clean_command = ["latexmk", "-C"]
-
-    def compile_tex():
-        subprocess.run(compile_command, cwd=str(tex_directory), check=True)
-
-    def clean_aux_files():
-        subprocess.run(clean_command, cwd=str(tex_directory), check=True)
-
-    return {
-        "actions": [clean_aux_files, compile_tex],
-        "targets": [str(target_pdf)],
-        "file_dep": [str(tex_directory / tex_file)],
-        "clean": True,
-    }
+if __name__ == "__main__":
+    main()

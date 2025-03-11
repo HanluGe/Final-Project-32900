@@ -2,132 +2,167 @@ import pandas as pd
 import wrds
 import config
 from datetime import datetime
-import unittest
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
+import warnings
+warnings.filterwarnings("ignore")
 
 """
-Is referenced by Table02Prep. Creates tables to understand the data and figures to understand the different ratios.
+Table02Analysis.py
+
+Provides analysis utilities for Table 02, including:
+ - create_summary_stat_table_for_data: produce summary stats in LaTeX
+ - create_figure_for_data: plot ratio lines (no rolling average)
+ - create_corr_matrix_for_data: build correlation table (same metric across PD, BD, Banks, Cmpust.)
+
+No testing code is included here; see Table02_testing.py for tests.
 """
 
 def create_summary_stat_table_for_data(datasets, UPDATED=False):
+    """
+    Creates summary statistics (count, mean, std, min, max) for each group's dataset,
+    outputs them as a LaTeX table to config.OUTPUT_DIR.
+    """
     summary_df = pd.DataFrame()
-    for key in datasets.keys():
-        dataset = datasets[key].drop(columns=['datadate'])
-        info = dataset.describe()
-        # 删除 25%, 50%, 75% 行，只保留 {count, mean, std, min, max}
-        info = info.drop(['25%', '50%', '75%'])
-        numeric_cols = info.select_dtypes(include=['float64', 'int']).columns
-        info[numeric_cols] = info[numeric_cols].round(2)
-        info.reset_index(inplace=True)
-        info['Key'] = key
-        info.set_index(['Key', 'index'], inplace=True)
-        summary_df = pd.concat([summary_df, info], axis=0)
+    for gname, df in datasets.items():
+        local_df = df.drop(columns=['datadate'], errors='ignore')
+        stats = local_df.describe()
+        stats = stats.drop(['25%', '50%', '75%'], errors='ignore')
+        numeric_cols = stats.select_dtypes(include=['float64','int']).columns
+        stats[numeric_cols] = stats[numeric_cols].round(2)
+        stats.reset_index(inplace=True)
+        stats['Key'] = gname
+        stats.set_index(['Key','index'], inplace=True)
+        summary_df = pd.concat([summary_df, stats], axis=0)
 
     summary_df = summary_df.round(2)
-    # 改列名以便表格更易读
-    summary_df.columns = ['total assets', 'book debt', 'book equity', 'market equity']
+    summary_df.columns = ['total assets','book debt','book equity','market equity']
 
-    caption = (
-        "There are significantly fewer entries for book equity than for other measures "
-        "as shown in the count rows. There are also some negatives for book equity, "
-        "which is not present for other categories."
-    )
-
-    latex_table = summary_df.to_latex(
-        index=True, 
-        multirow=True, 
+    cap = """
+    There are significantly fewer entries for book equity
+    than for other measures as shown in the count rows.
+    There are also some negatives for book equity.
+    """
+    latex = summary_df.to_latex(
+        index=True,
+        multirow=True,
         multicolumn=True,
-        escape=False, 
-        float_format="%.2f", 
-        caption=caption, 
+        escape=False,
+        float_format="%.2f",
+        caption=cap,
         label='tab:Table 2.1'
     )
-    # 有时 to_latex 可能插入多余的 \multirow，这里做个替换
-    latex_table = latex_table.replace(r'\multirow[t]{5}{*}', '')
+    latex = latex.replace(r'\multirow[t]{5}{*}', '')
 
-    # 将输出文件写到 config.OUTPUT_DIR
     if UPDATED:
-        outpath = config.OUTPUT_DIR / "updated_table02_sstable.tex"
+        out = config.OUTPUT_DIR / "updated_table02_sstable.tex"
     else:
-        outpath = config.OUTPUT_DIR / "table02_sstable.tex"
+        out = config.OUTPUT_DIR / "table02_sstable.tex"
 
-    with open(outpath, 'w', encoding='utf-8') as f:
-        f.write(latex_table)
-    print(f"Summary stats LaTeX saved to: {outpath}")
+    with open(out, 'w', encoding='utf-8') as f:
+        f.write(latex)
+    print(f"Summary stats LaTeX saved to: {out}")
 
 
-def create_figure_for_data(ratios_dict, UPDATED=False):
+def create_figure_for_data(ratio_df, UPDATED=False):
     """
-    ratios_dict 是一个 dict，每个 key 对应一个 DataFrame 或 Series，显示各组别的比率等。
-    此函数生成四个子图 (total_assets, book_debt, book_equity, market_equity)，
-    并保存为 PNG 图表。
+    Plots lines for ratio columns, grouped by subplots:
+      - total_assets*
+      - book_debt*
+      - book_equity*
+      - market_equity*
+
+    No rolling average lines; straightforward time series for each ratio.
     """
+    ratio_df = ratio_df.copy()
+    ratio_df.sort_index(inplace=True)
+    ratio_df = ratio_df.apply(pd.to_numeric, errors='coerce').ffill().bfill()
 
-    # 先把所有 Series/DataFrame 逐个拼接到 concatenated_df
-    concatenated_df = pd.concat(
-        [s.rename(f"{key}_{s.name}") for key, s in ratios_dict.items()], 
-        axis=1
-    )
+    asset_cols = [c for c in ratio_df.columns if 'total_assets' in c]
+    debt_cols  = [c for c in ratio_df.columns if 'book_debt' in c]
+    eqty_cols  = [c for c in ratio_df.columns if 'book_equity' in c]
+    mkt_cols   = [c for c in ratio_df.columns if 'market_equity' in c]
 
-    concatenated_df.sort_index(inplace=True)
-    concatenated_df = concatenated_df.apply(pd.to_numeric, errors='coerce')
-    concatenated_df.ffill(inplace=True)
-    concatenated_df.bfill(inplace=True)
-
-    # 依据列名区分四种指标
-    asset_columns = [col for col in concatenated_df.columns if 'total_assets' in col]
-    debt_columns = [col for col in concatenated_df.columns if 'book_debt' in col]
-    equity_columns = [col for col in concatenated_df.columns if 'book_equity' in col]
-    market_columns = [col for col in concatenated_df.columns if 'market_equity' in col]
-
-    # 这里设定每种分类的颜色，若列数 > 4，可以再做扩展
-    asset_colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red']
-    debt_colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red']
-    equity_colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red']
-    market_colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red']
-
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True)
-
-    # 根据 subplot 分别绘图
-    for ax, columns, colors, category in zip(
-        axes.flatten(),
-        [asset_columns, debt_columns, equity_columns, market_columns],
-        [asset_colors, debt_colors, equity_colors, market_colors],
-        ['total_assets', 'book_debt', 'book_equity', 'market_equity']
-    ):
-        columns.sort()
-        # unique_keys 用于 label
-        unique_keys = [col.split('_')[-1] for col in columns]  # 取列名里最后一段当作 key
-
-        for col, color, key in zip(columns, colors, unique_keys):
-            ax.plot(
-                concatenated_df.index, 
-                concatenated_df[col], 
-                label=key, 
-                color=color
-            )
-        ax.set_title(f"{category.capitalize()}")
+    fig, axes = plt.subplots(2,2, figsize=(12,8), sharex=True)
+    cat_map = [
+       ('Total_assets', asset_cols),
+       ('Book_debt',   debt_cols),
+       ('Book_equity', eqty_cols),
+       ('Market_equity', mkt_cols)
+    ]
+    for ax, (title, cols) in zip(axes.flatten(), cat_map):
+        cols.sort()
+        for col in cols:
+            ax.plot(ratio_df.index, ratio_df[col], label=col)
+        ax.set_title(title)
         ax.legend(loc='upper left')
         ax.grid(True)
         ax.set_xlabel('Date')
         ax.set_ylabel('Value')
 
-    # 在图下方添加一句说明
     time = datetime.now()
-    caption = (
-        f"{time}: From the plots above we can observe the trends of the ratios for "
-        "each comparison group over time. Missing values have been forward/back filled."
-    )
-    fig.text(0.5, -0.1, caption, ha='center', fontsize=8)
+    cap = f"{time}: Subplots show ratio lines, no rolling average."
+    fig.text(0.5, -0.08, cap, ha='center', fontsize=8)
 
-    # 将图片保存到 config.OUTPUT_DIR
     if UPDATED:
         figpath = config.OUTPUT_DIR / "updated_table02_figure.png"
     else:
         figpath = config.OUTPUT_DIR / "table02_figure.png"
-
     plt.savefig(figpath, bbox_inches='tight')
-    plt.close(fig)  # 生成后关掉，防止后续重复画
+    plt.close(fig)
     print(f"Figure saved to: {figpath}")
+
+
+def create_corr_matrix_for_data(datasets, UPDATED=False):
+    """
+    Builds correlation matrices for each metric (total_assets, book_debt, book_equity, market_equity)
+    across PD, BD, Banks, Cmpust.
+    The result is saved as a LaTeX file in config.OUTPUT_DIR.
+    """
+    group_order = ['PD','BD','Banks','Cmpust.']
+    metrics = ['total_assets','book_debt','book_equity','market_equity']
+    all_latex = []
+
+    for m in metrics:
+        combined_df = pd.DataFrame()
+        for g in group_order:
+            if g not in datasets:
+                continue
+            if m not in datasets[g].columns:
+                continue
+            sub = datasets[g][['datadate', m]].copy()
+            sub['datadate'] = pd.to_datetime(sub['datadate'])
+            sub[m] = pd.to_numeric(sub[m], errors='coerce')
+            sub = sub.dropna(subset=[m])
+            sub = sub.drop_duplicates(subset=['datadate'])
+            sub.set_index('datadate', inplace=True)
+            col_name = f"{m}_{g}"
+
+            if combined_df.empty:
+                combined_df[col_name] = sub[m]
+            else:
+                combined_df = combined_df.join(sub[m].rename(col_name), how='outer')
+
+        combined_df.dropna(how='all', inplace=True)
+        if len(combined_df.columns) < 2:
+            continue
+
+        corr = combined_df.corr()
+        c_latex = corr.to_latex(
+            float_format="%.3f",
+            caption=f"Correlation of {m} across PD, BD, Banks, Cmpust.",
+            label=f"tab:{m}"
+        )
+        all_latex.append(c_latex)
+
+    final_txt = "\n\n".join(all_latex)
+    if UPDATED:
+        out = config.OUTPUT_DIR / "updated_table02_corr.tex"
+    else:
+        out = config.OUTPUT_DIR / "table02_corr.tex"
+
+    with open(out, 'w', encoding='utf-8') as f:
+        f.write(final_txt)
+
+    print(f"Correlation matrix LaTeX saved to: {out}")
