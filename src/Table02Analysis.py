@@ -60,6 +60,8 @@ def create_summary_stat_table_for_data(datasets, UPDATED=False):
     else:
         out = config.OUTPUT_DIR / "table02_sstable.tex"
 
+    config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
     with open(out, 'w', encoding='utf-8') as f:
         f.write(latex)
     print(f"Summary stats LaTeX saved to: {out}")
@@ -109,6 +111,9 @@ def create_figure_for_data(ratio_df, UPDATED=False):
         figpath = config.OUTPUT_DIR / "updated_table02_figure.png"
     else:
         figpath = config.OUTPUT_DIR / "table02_figure.png"
+        
+    config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    
     plt.savefig(figpath, bbox_inches='tight')
     plt.close(fig)
     print(f"Figure saved to: {figpath}")
@@ -161,6 +166,8 @@ def create_corr_matrix_for_data(datasets, UPDATED=False):
         out = config.OUTPUT_DIR / "updated_table02_corr.tex"
     else:
         out = config.OUTPUT_DIR / "table02_corr.tex"
+        
+    config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     with open(out, 'w', encoding='utf-8') as f:
         f.write(final_txt)

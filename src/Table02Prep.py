@@ -109,7 +109,8 @@ def get_comparison_group_data(db, linktable_df, start_date, end_date, ITERATE=Fa
 # Modified to use Python engine, skip bad lines, and disable quoting to avoid EOF errors.
 #---------------------------------------------------------------------
 def read_in_manual_datasets():
-    manual_dir = Path("D:/360MoveData/Users/liujunyuan/Desktop/Full-Stack-Quant-Finance/Final-Project-32900/data_manual")
+    script_dir = Path(__file__).resolve().parent
+    manual_dir = (script_dir / "../data_manual").resolve()
     ticks_csv = manual_dir / 'ticks.csv'
     link_csv = manual_dir / 'updated_linktable.csv'
 

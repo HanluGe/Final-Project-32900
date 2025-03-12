@@ -8,6 +8,10 @@ from zipfile import ZipFile
 from io import BytesIO, StringIO
 from pathlib import Path
 
+import load_fred
+import importlib
+importlib.reload(load_fred)
+
 from load_fred import *  # Ensure this module is available
 
 """
@@ -62,9 +66,22 @@ def fetch_financial_data_quarterly(gvkey, start_date, end_date, db):
     start_qtr = date_to_quarter(start_date_dt)
     end_qtr = date_to_quarter(end_date_dt)
 
+    # query = f"""
+    # SELECT datafqtr, atq AS total_assets, ltq AS book_debt, 
+    #        COALESCE(teqq, ceqq + COALESCE(pstkq, 0) + COALESCE(mibnq, 0)) AS book_equity, 
+    #        cshoq*prccq AS market_equity, gvkey, conm
+    # FROM comp.fundq as cst
+    # WHERE cst.gvkey = '{str(gvkey).zfill(6)}'
+    #   AND cst.datafqtr BETWEEN '{start_qtr}' AND '{end_qtr}'
+    #   AND indfmt='INDL'
+    #   AND datafmt='STD'
+    #   AND popsrc='D'
+    #   AND consol='C'
+    # """cshoq*
+    
     query = f"""
-    SELECT datafqtr, atq AS total_assets, ltq AS book_debt, 
-           COALESCE(teqq, ceqq + COALESCE(pstkq, 0) + COALESCE(mibnq, 0)) AS book_equity, 
+    SELECT datafqtr, atq AS total_assets, (atq - ceqq) AS book_debt, 
+           ceqq AS book_equity, 
            cshoq*prccq AS market_equity, gvkey, conm
     FROM comp.fundq as cst
     WHERE cst.gvkey = '{str(gvkey).zfill(6)}'
@@ -116,7 +133,10 @@ def load_macro_data():
     macro_data = macro_data.rename(columns={'UNRATE': 'unemp_rate', 
                                               'NFCI': 'nfci', 
                                               'GDPC1': 'real_gdp', 
-                                              'A191RL1Q225SBEA': 'real_gdp_growth'})
+                                              'A191RL1Q225SBEA': 'real_gdp_growth',
+                                              'A191RO1Q156NBEA': 'real_gdp_growth_qoq',
+                                              'A191RP1Q027SBEA': 'real_gdp_growth_yoy'
+                                              })
     return macro_data
 
 def load_bd_financials():
@@ -263,8 +283,8 @@ def pull_CRSP_Value_Weighted_Index(db):
     """
     sql_query = """
         SELECT date, vwretd
-        FROM crsp.msi as msi
-        WHERE msi.date >= '1969-01-01' AND msi.date <= '2024-02-29'
+        FROM crsp.dsi as dsi
+        WHERE dsi.date >= '1969-01-01' AND dsi.date <= '2024-02-29'
         """
     data = db.raw_sql(sql_query, date_cols=["date"])
     return data

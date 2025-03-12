@@ -20,6 +20,9 @@ from statsmodels.tsa.ar_model import AutoReg
 from statsmodels.tsa.seasonal import seasonal_decompose
 
 import Table03Load
+import importlib
+importlib.reload(Table03Load)
+
 from Table03Load import quarter_to_date, date_to_quarter
 import Table03Analysis
 import Table02Prep
@@ -54,6 +57,7 @@ def prep_dataset(dataset, UPDATED=False):
     """
     dataset = dataset.drop_duplicates()
     dataset['datafqtr'] = dataset['datafqtr'].apply(quarter_to_date)
+    dataset = dataset.dropna()
     aggregated_dataset = dataset.groupby('datafqtr').agg({
         'total_assets': 'sum',
         'book_debt': 'sum',
@@ -63,7 +67,10 @@ def prep_dataset(dataset, UPDATED=False):
     
     bd_financials_combined = combine_bd_financials(UPDATED=UPDATED)
     aggregated_dataset = aggregated_dataset.merge(bd_financials_combined, left_on='datafqtr', right_index=True)
-
+    aggregated_dataset = aggregated_dataset[
+        (aggregated_dataset['datafqtr'] >= "1970-01-01") & 
+        (aggregated_dataset['datafqtr'] <= "2012-12-31")
+    ]
     return aggregated_dataset
 
 def calculate_ratios(data):
@@ -79,6 +86,50 @@ def calculate_ratios(data):
     data['book_cap_ratio'] = data['book_equity'] / (data['book_debt'] + data['book_equity'])
     data['aem_leverage'] = data['bd_fin_assets'] / (data['bd_fin_assets'] - data['bd_liabilities'])
     return data
+
+
+# def process_financial_data(dataset, UPDATED=False):
+#     """
+#     Process the raw financial dataset by cleaning, aggregating, and calculating key financial ratios.
+    
+#     Output: Aggregated DataFrame with total_assets, book_debt per quarter, 
+#     along with properly computed market_cap_ratio and book_cap_ratio.
+#     """
+#     dataset = dataset.drop_duplicates()
+#     dataset['datafqtr'] = dataset['datafqtr'].apply(quarter_to_date)
+
+#     # **个体比率计算**
+#     dataset['market_cap_ratio'] = dataset['market_equity'] / (dataset['book_debt'] + dataset['market_equity'])
+#     dataset['book_cap_ratio'] = dataset['book_equity'] / (dataset['book_debt'] + dataset['book_equity'])
+
+#     dataset['market_cap_ratio'] = dataset['market_cap_ratio'].fillna(0)
+#     dataset['book_cap_ratio'] = dataset['book_cap_ratio'].fillna(0)
+#     # **计算总资产、债务**
+#     aggregated_dataset = dataset.groupby('datafqtr').agg({
+#         'total_assets': 'sum',
+#         'book_debt': 'sum'
+#     }).reset_index()
+
+#     # **市值加权 market_cap_ratio**
+#     aggregated_dataset['market_cap_ratio'] = dataset.groupby('datafqtr').apply(
+#         lambda x: np.average(x['market_cap_ratio'], weights=x['market_equity'])
+#         if x['market_equity'].sum() > 0 else np.nan
+#     ).values
+
+#     # **等权 book_cap_ratio**
+#     aggregated_dataset['book_cap_ratio'] = dataset.groupby('datafqtr')['book_cap_ratio'].mean().values
+
+#     # **合并 broker-dealer 数据**
+#     bd_financials_combined = combine_bd_financials(UPDATED=UPDATED).reset_index()
+#     aggregated_dataset = aggregated_dataset.merge(bd_financials_combined, on='datafqtr')
+
+#     # **计算 aem_leverage**
+#     aggregated_dataset['aem_leverage'] = aggregated_dataset['bd_fin_assets'] / (
+#         aggregated_dataset['bd_fin_assets'].replace(0, np.nan) - aggregated_dataset['bd_liabilities']
+#     )
+
+#     return aggregated_dataset
+
 
 def aggregate_ratios(data):
     """
@@ -105,7 +156,7 @@ def convert_ratios_to_factors(data):
     factors_df = pd.DataFrame(index=data.index)
 
     # AR(1) for market cap ratio
-    cleaned_data = data['market_cap_ratio'].dropna()
+    cleaned_data = data['market_cap_ratio'].fillna(0)
     model = AutoReg(cleaned_data, lags=1, trend='c')
     model_fitted = model.fit()
     factors_df['innovations_mkt_cap'] = model_fitted.resid
@@ -113,7 +164,7 @@ def convert_ratios_to_factors(data):
     factors_df.drop(columns=['innovations_mkt_cap'], inplace=True)
 
     # AR(1) for book cap ratio
-    cleaned_data = data['book_cap_ratio'].dropna()
+    cleaned_data = data['book_cap_ratio'].fillna(0)
     model = AutoReg(cleaned_data, lags=1, trend='c')
     model_fitted = model.fit()
     factors_df['innovations_book_cap'] = model_fitted.resid
@@ -149,18 +200,19 @@ def macro_variables(db, UPDATED=False):
     Output: A DataFrame containing macro data from FRED, Shiller, Fama-French factors, and CRSP volatility.
     It renames FRED series, resamples to quarterly, and merges all data on the date index.
     """
-    import numpy as np
-    import pandas as pd
     
     # Load FRED macroeconomic data and rename columns
     macro_data = Table03Load.load_fred_macro_data()
     macro_data = macro_data.rename(columns={'UNRATE': 'unemp_rate',
                                               'NFCI': 'nfci',
                                               'GDPC1': 'real_gdp',
-                                              'A191RL1Q225SBEA': 'real_gdp_growth'})
+                                              'A191RL1Q225SBEA': 'real_gdp_growth',
+                                              'A191RO1Q156NBEA': 'real_gdp_growth_qoq',
+                                              'A191RP1Q027SBEA': 'real_gdp_growth_yoy'})
     macro_data.index = pd.to_datetime(macro_data.index)
     macro_data.rename(columns={'DATE': 'date'}, inplace=True)
     macro_quarterly = macro_data.resample('Q').mean()
+    macro_quarterly['real_gdp_growth_calc'] = macro_quarterly['real_gdp'].pct_change(periods=1)
 
     # Load Shiller market data, calculate E/P, and resample quarterly
     shiller_cape = Table03Load.load_shiller_pe()
@@ -182,7 +234,8 @@ def macro_variables(db, UPDATED=False):
     
     # Compute market volatility using logarithmic returns:
     # Assume vwretd is a return (in decimal form), then the log return is ln(1 + vwretd)
-    log_returns = np.log(1 + value_wtd_indx.set_index('date')['vwretd'])
+    #log_returns = np.log(1 + value_wtd_indx.set_index('date')['vwretd'])
+    log_returns = value_wtd_indx.set_index('date')['vwretd']
     annual_vol_quarterly = log_returns.groupby(pd.Grouper(freq='Q')).std().rename('mkt_vol')
 
     # Merge all macroeconomic data
@@ -204,18 +257,21 @@ def create_panelA(ratios, macro):
         'book_cap_ratio': 'Book capital',
         'aem_leverage': 'AEM leverage'
     })
-    macro = macro[['e/p', 'unemp_rate', 'nfci', 'real_gdp', 'mkt_ret', 'mkt_vol']]
+    macro = macro[['e/p', 'unemp_rate', 'nfci', 'real_gdp_growth', 'real_gdp_growth_qoq', 'real_gdp_growth_yoy', 'real_gdp_growth_calc', 'mkt_ret', 'mkt_vol']]
     macro_renamed = macro.rename(columns={
         'e/p': 'E/P',
         'unemp_rate': 'Unemployment',
         'nfci': 'Financial conditions',
-        'real_gdp': 'GDP',
+        'real_gdp_growth': 'GDP',
+        'real_gdp_growth_qoq': 'GDP1',
+        'real_gdp_growth_yoy': 'GDP2',
+        'real_gdp_growth_calc': 'GDP3',
         'mkt_ret': 'Market excess return',
         'mkt_vol': 'Market volatility'
     })
     panelA = ratios_renamed.merge(macro_renamed, left_index=True, right_index=True)
     ordered_columns = ['Market capital', 'Book capital', 'AEM leverage',
-                       'E/P', 'Unemployment', 'Financial conditions', 'GDP', 'Market excess return', 'Market volatility']
+                       'E/P', 'Unemployment', 'Financial conditions', 'GDP','GDP1','GDP2','GDP3', 'Market excess return', 'Market volatility']
     panelA = panelA[ordered_columns]
     panelA = panelA.loc['1970-01-01':]
     return panelA
@@ -269,7 +325,7 @@ def calculate_correlation_panelA(panelA):
     """
     correlation_panelA = format_correlation_matrix(panelA.iloc[:, :3].corr())
     main_cols = panelA[['Market capital', 'Book capital', 'AEM leverage']]
-    other_cols = panelA[['E/P', 'Unemployment', 'GDP', 'Financial conditions', 'Market volatility']]
+    other_cols = panelA[['E/P', 'Unemployment', 'GDP', 'GDP1', 'GDP2','GDP3', 'Financial conditions', 'Market volatility']]
     correlation_results_panelA = pd.DataFrame(index=main_cols.columns)
     for column in other_cols.columns:
         correlation_results_panelA[column] = main_cols.corrwith(other_cols[column])
@@ -349,34 +405,43 @@ def convert_and_export_tables_to_latex(corrA, corrB, UPDATED=False):
     with open(outfile, 'w', encoding='utf-8') as f:
         f.write(full_latex)
 
-def main(UPDATED=False):
-    """
-    Main function to execute the entire data processing pipeline for Table 03.
-    Input: UPDATED (bool) flag to determine if updated data should be used.
-    Output: Generates and exports a formatted correlation table in LaTeX format.
-    The function connects to WRDS, processes primary dealer data, calculates ratios and factors,
-    merges with macro variables, and exports summary statistics, figures, and correlation matrices.
-    """
-    db = wrds.Connection(wrds_username=config.WRDS_USERNAME)
-    prim_dealers, _ = Table02Prep.prim_deal_merge_manual_data_w_linktable(UPDATED=UPDATED)
-    dataset, _ = Table03Load.fetch_data_for_tickers(prim_dealers, db)
-    # Use the local prep_dataset defined in Table03.py (not in Table03Analysis)
-    prep_datast = prep_dataset(dataset, UPDATED=UPDATED)
-    ratio_dataset = aggregate_ratios(prep_datast)
-    factors_dataset = convert_ratios_to_factors(ratio_dataset)
-    macro_dataset = macro_variables(db, UPDATED=UPDATED)
-    panelA = create_panelA(ratio_dataset, macro_dataset)
-    panelB = create_panelB(factors_dataset, macro_dataset)
-    Table03Analysis.create_summary_stat_table_for_data(panelB, UPDATED=UPDATED)
-    Table03Analysis.plot_figure02(ratio_dataset, UPDATED=UPDATED)
-    # Generate Figure 3 using standardized data for both financial ratios and macro variables
-    Table03Analysis.plot_figure03(ratio_dataset, macro_dataset, UPDATED=UPDATED)
-    correlation_panelA = calculate_correlation_panelA(panelA)
-    correlation_panelB = calculate_correlation_panelB(panelB)
-    formatted_table = format_final_table(correlation_panelA, correlation_panelB)
-    convert_and_export_tables_to_latex(correlation_panelA, correlation_panelB, UPDATED=UPDATED)
-    print(formatted_table.style.format(na_rep=''))
+# def main(UPDATED=False):
+#     """
+#     Main function to execute the entire data processing pipeline for Table 03.
+#     Input: UPDATED (bool) flag to determine if updated data should be used.
+#     Output: Generates and exports a formatted correlation table in LaTeX format.
+#     The function connects to WRDS, processes primary dealer data, calculates ratios and factors,
+#     merges with macro variables, and exports summary statistics, figures, and correlation matrices.
+#     """
+#     db = wrds.Connection(wrds_username=config.WRDS_USERNAME)
+#     prim_dealers, _ = Table02Prep.prim_deal_merge_manual_data_w_linktable(UPDATED=UPDATED)
+#     dataset, _ = Table03Load.fetch_data_for_tickers(prim_dealers, db)
+#     # Use the local prep_dataset defined in Table03.py (not in Table03Analysis)
+#     prep_datast = prep_dataset(dataset, UPDATED=UPDATED)
+#     ratio_dataset = aggregate_ratios(prep_datast)
+#     factors_dataset = convert_ratios_to_factors(ratio_dataset)
+#     macro_dataset = macro_variables(db, UPDATED=UPDATED)
+#     panelA = create_panelA(ratio_dataset, macro_dataset)
+#     panelB = create_panelB(factors_dataset, macro_dataset)
+#     Table03Analysis.create_summary_stat_table_for_data(panelB, UPDATED=UPDATED)
+#     correlations = {"Market_AEM": round(panelA["AEM leverage"]["Market capital"], 2), "Market_Book": round(panelA["Book capital"]["Market capital"], 2), "AEM_Book": round(panelA["AEM leverage"]["Book capital"], 2)}
+#     recession_periods = [(datetime(1973, 11, 1), datetime(1975, 3, 1)),
+#                         (datetime(1980, 1, 1), datetime(1980, 7, 1)),
+#                         (datetime(1981, 7, 1), datetime(1982, 11, 1)),
+#                         (datetime(1990, 7, 1), datetime(1991, 3, 1)),
+#                         (datetime(2001, 3, 1), datetime(2001, 11, 1)),
+#                         (datetime(2007, 12, 1), datetime(2009, 6, 1))]
     
-if __name__ == "__main__":
-    main(UPDATED=False)
-    print("Table 03 has been created and exported to LaTeX format.")
+#     Table03Analysis.plot_figure02(ratio_dataset, recession_periods, correlations, UPDATED=True)
+#     #Table03Analysis.plot_figure02(ratio_dataset, UPDATED=UPDATED)
+#     # Generate Figure 3 using standardized data for both financial ratios and macro variables
+#     Table03Analysis.plot_figure03(ratio_dataset, macro_dataset, UPDATED=UPDATED)
+#     correlation_panelA = calculate_correlation_panelA(panelA)
+#     correlation_panelB = calculate_correlation_panelB(panelB)
+#     formatted_table = format_final_table(correlation_panelA, correlation_panelB)
+#     convert_and_export_tables_to_latex(correlation_panelA, correlation_panelB, UPDATED=UPDATED)
+#     print(formatted_table.style.format(na_rep=''))
+    
+# if __name__ == "__main__":
+#     main(UPDATED=False)
+#     print("Table 03 has been created and exported to LaTeX format.")
