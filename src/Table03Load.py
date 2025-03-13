@@ -122,14 +122,14 @@ def fetch_data_for_tickers(ticks, db):
     
     return prim_dealers, empty_tickers
 
-def load_macro_data():
+def load_macro_data(from_cache):
     """
     Function to load macro data from FRED.
     
     Returns:
       macro_data (DataFrame): Contains macroeconomic data.
     """
-    macro_data = load_fred_macro_data() 
+    macro_data = load_fred_macro_data(from_cache= from_cache) 
     macro_data = macro_data.rename(columns={'UNRATE': 'unemp_rate', 
                                               'NFCI': 'nfci', 
                                               'GDPC1': 'real_gdp', 
@@ -238,7 +238,7 @@ def pull_shiller_pe(url=URL_SHILLER, data_dir=DATA_DIR):
     try:
         response = requests.get(url)
         if response.status_code == 200:
-            file_path = data_dir / "pulled" / "shiller_pe.xls"
+            file_path = data_dir / "pulled" / "shiller_pe.xlsx"
             file_path.parent.mkdir(parents=True, exist_ok=True)
             with open(file_path, 'wb') as file:
                 file.write(response.content)
@@ -261,7 +261,7 @@ def load_shiller_pe(url=URL_SHILLER, data_dir=DATA_DIR, from_cache=True):
     Returns:
       DataFrame with Shiller P/E data.
     """
-    file_path = data_dir / "pulled" / "shiller_pe.xls"
+    file_path = data_dir / "pulled" / "shiller_pe.xlsx"
     if from_cache and file_path.exists():
         print("Loading data from cache.")
         df = pd.read_excel(file_path, sheet_name='Data', skiprows=7, usecols="A,M")
@@ -271,20 +271,45 @@ def load_shiller_pe(url=URL_SHILLER, data_dir=DATA_DIR, from_cache=True):
         df = pd.read_excel(file_path, sheet_name='Data', skiprows=7, usecols="A,M")
     return df
 
-def pull_CRSP_Value_Weighted_Index(db):
+def pull_CRSP_Value_Weighted_Index(db, data_dir=DATA_DIR, from_cache=True, start_date=config.START_DATE, end_date=None):
     """
     Pulls a value-weighted stock index from the CRSP database.
     
     Parameters:
       db: WRDS connection object.
-    
+      data_dir: Path to store or retrieve cached data.
+      from_cache: If True, attempt to load data from cache before querying WRDS.
+      start_date: Start date for data retrieval (default from config).
+      end_date: End date for data retrieval (default is today).
+
     Returns:
       DataFrame with columns 'date' and 'vwretd' representing the value-weighted index.
     """
-    sql_query = """
-        SELECT date, vwretd
-        FROM crsp.dsi as dsi
-        WHERE dsi.date >= '1969-01-01' AND dsi.date <= '2024-02-29'
-        """
-    data = db.raw_sql(sql_query, date_cols=["date"])
-    return data
+    if end_date is None:
+        end_date = datetime.today().strftime('%Y-%m-%d') 
+
+    cache_path = data_dir / "pulled" / "crsp_return.xlsx"
+
+    if from_cache and cache_path.exists():
+        try:
+            df = pd.read_excel(cache_path)
+            if not df.empty:
+                print(f"Loaded CRSP data from cache: {cache_path}")
+                return df
+        except Exception as e:
+            print(f"Failed to read cache file: {e}, re-downloading data...")
+
+    else:
+      sql_query = f"""
+          SELECT date, vwretd
+          FROM crsp.dsi as dsi
+          WHERE dsi.date >= '{start_date}' AND dsi.date <= '{end_date}'
+      """
+      df = db.raw_sql(sql_query, date_cols=["date"])
+
+      cache_path.parent.mkdir(parents=True, exist_ok=True)
+
+      df.to_excel(cache_path, index=False)
+      print(f"Downloaded CRSP data and saved to {cache_path}")
+
+    return df

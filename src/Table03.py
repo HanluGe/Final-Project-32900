@@ -67,10 +67,16 @@ def prep_dataset(dataset, UPDATED=False):
     
     bd_financials_combined = combine_bd_financials(UPDATED=UPDATED)
     aggregated_dataset = aggregated_dataset.merge(bd_financials_combined, left_on='datafqtr', right_index=True)
-    aggregated_dataset = aggregated_dataset[
-        (aggregated_dataset['datafqtr'] >= "1970-01-01") & 
-        (aggregated_dataset['datafqtr'] <= "2012-12-31")
-    ]
+    if not UPDATED:
+        aggregated_dataset = aggregated_dataset[
+            (aggregated_dataset['datafqtr'] >= "1970-01-01") & 
+            (aggregated_dataset['datafqtr'] <= config.END_DATE)
+        ]
+    else:
+        aggregated_dataset = aggregated_dataset[
+            (aggregated_dataset['datafqtr'] >= "1970-01-01") & 
+            (aggregated_dataset['datafqtr'] <= config.UPDATED_END_DATE)
+        ]
     return aggregated_dataset
 
 def calculate_ratios(data):
@@ -193,7 +199,7 @@ def calculate_ep(shiller_cape):
     df['e/p'] = 1 / df['cape']
     return df
 
-def macro_variables(db, UPDATED=False):
+def macro_variables(db, from_cache=True, UPDATED=False):
     """
     Creates a merged DataFrame of quarterly macroeconomic variables.
     Input: WRDS connection object and UPDATED flag.
@@ -202,7 +208,7 @@ def macro_variables(db, UPDATED=False):
     """
     
     # Load FRED macroeconomic data and rename columns
-    macro_data = Table03Load.load_fred_macro_data()
+    macro_data = Table03Load.load_fred_macro_data(from_cache = from_cache)
     macro_data = macro_data.rename(columns={'UNRATE': 'unemp_rate',
                                               'NFCI': 'nfci',
                                               'GDPC1': 'real_gdp',
@@ -215,7 +221,7 @@ def macro_variables(db, UPDATED=False):
     macro_quarterly['real_gdp_growth_calc'] = macro_quarterly['real_gdp'].pct_change(periods=1)
 
     # Load Shiller market data, calculate E/P, and resample quarterly
-    shiller_cape = Table03Load.load_shiller_pe()
+    shiller_cape = Table03Load.load_shiller_pe(from_cache = from_cache)
     shiller_ep = calculate_ep(shiller_cape)
     shiller_quarterly = shiller_ep.resample('Q').mean()
 
@@ -316,13 +322,15 @@ def format_correlation_matrix(corr_matrix):
     corr_matrix = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=0).astype(bool))
     return corr_matrix
 
-def calculate_correlation_panelA(panelA):
+def calculate_correlation_panelA(panelA,UPDATED=False):
     """
     Calculates pairwise correlations for Panel A (levels) data.
     Input: panelA (DataFrame) containing levels of financial ratios and macro variables.
     Output: A correlation DataFrame showing correlations between the main ratios and each macro variable.
     It computes the correlations among the first three columns and then with each macro variable.
     """
+    if not UPDATED:
+        panelA = panelA[:config.END_DATE]
     correlation_panelA = format_correlation_matrix(panelA.iloc[:, :3].corr())
     main_cols = panelA[['Market capital', 'Book capital', 'AEM leverage']]
     other_cols = panelA[['E/P', 'Unemployment', 'GDP', 'GDP1', 'GDP2','GDP3', 'Financial conditions', 'Market volatility']]
@@ -331,13 +339,15 @@ def calculate_correlation_panelA(panelA):
         correlation_results_panelA[column] = main_cols.corrwith(other_cols[column])
     return pd.concat([correlation_panelA, correlation_results_panelA.T], axis=0)
 
-def calculate_correlation_panelB(panelB):
+def calculate_correlation_panelB(panelB,UPDATED=False):
     """
     Calculates pairwise correlations for Panel B (factor growth rates) data.
     Input: panelB (DataFrame) containing analytical factor growth rates and macro variable growth rates.
     Output: A correlation DataFrame showing correlations between factor growth rates and macro growth rates.
     It computes the upper triangle and then correlations between the first three columns and the remaining columns.
     """
+    if not UPDATED:
+        panelB = panelB[:config.END_DATE]
     correlation_panelB = format_correlation_matrix(panelB.iloc[:, :3].corr())
     main_cols = panelB[['Market capital factor', 'Book capital factor', 'AEM leverage factor']]
     other_cols = panelB[['Market excess return', 'E/P growth', 'Unemployment growth', 'GDP growth', 'Financial conditions growth', 'Market volatility growth']]
@@ -405,43 +415,36 @@ def convert_and_export_tables_to_latex(corrA, corrB, UPDATED=False):
     with open(outfile, 'w', encoding='utf-8') as f:
         f.write(full_latex)
 
-# def main(UPDATED=False):
-#     """
-#     Main function to execute the entire data processing pipeline for Table 03.
-#     Input: UPDATED (bool) flag to determine if updated data should be used.
-#     Output: Generates and exports a formatted correlation table in LaTeX format.
-#     The function connects to WRDS, processes primary dealer data, calculates ratios and factors,
-#     merges with macro variables, and exports summary statistics, figures, and correlation matrices.
-#     """
-#     db = wrds.Connection(wrds_username=config.WRDS_USERNAME)
-#     prim_dealers, _ = Table02Prep.prim_deal_merge_manual_data_w_linktable(UPDATED=UPDATED)
-#     dataset, _ = Table03Load.fetch_data_for_tickers(prim_dealers, db)
-#     # Use the local prep_dataset defined in Table03.py (not in Table03Analysis)
-#     prep_datast = prep_dataset(dataset, UPDATED=UPDATED)
-#     ratio_dataset = aggregate_ratios(prep_datast)
-#     factors_dataset = convert_ratios_to_factors(ratio_dataset)
-#     macro_dataset = macro_variables(db, UPDATED=UPDATED)
-#     panelA = create_panelA(ratio_dataset, macro_dataset)
-#     panelB = create_panelB(factors_dataset, macro_dataset)
-#     Table03Analysis.create_summary_stat_table_for_data(panelB, UPDATED=UPDATED)
-#     correlations = {"Market_AEM": round(panelA["AEM leverage"]["Market capital"], 2), "Market_Book": round(panelA["Book capital"]["Market capital"], 2), "AEM_Book": round(panelA["AEM leverage"]["Book capital"], 2)}
-#     recession_periods = [(datetime(1973, 11, 1), datetime(1975, 3, 1)),
-#                         (datetime(1980, 1, 1), datetime(1980, 7, 1)),
-#                         (datetime(1981, 7, 1), datetime(1982, 11, 1)),
-#                         (datetime(1990, 7, 1), datetime(1991, 3, 1)),
-#                         (datetime(2001, 3, 1), datetime(2001, 11, 1)),
-#                         (datetime(2007, 12, 1), datetime(2009, 6, 1))]
+def main(UPDATED=False):
+    """
+    Main function to execute the entire data processing pipeline for Table 03.
+    Input: UPDATED (bool) flag to determine if updated data should be used.
+    Output: Generates and exports a formatted correlation table in LaTeX format.
+    The function connects to WRDS, processes primary dealer data, calculates ratios and factors,
+    merges with macro variables, and exports summary statistics, figures, and correlation matrices.
+    """
+    db = wrds.Connection(wrds_username=config.WRDS_USERNAME)
+    # prim_dealers, _ = Table02Prep.prim_deal_merge_manual_data_w_linktable(UPDATED=UPDATED)
+    prim_dealers = Table02Prep.clean_primary_dealers_data(fname='Primary_Dealer_Link_Table3.csv')
+    dataset, _ = Table03Load.fetch_data_for_tickers(prim_dealers, db)
+    # Use the local prep_dataset defined in Table03.py (not in Table03Analysis)
+    prep_datast = prep_dataset(dataset, UPDATED=UPDATED)
+    ratio_dataset = aggregate_ratios(prep_datast)
+    factors_dataset = convert_ratios_to_factors(ratio_dataset)
+    macro_dataset = macro_variables(db, UPDATED=UPDATED)
+    panelA = create_panelA(ratio_dataset, macro_dataset)
+    panelB = create_panelB(factors_dataset, macro_dataset)
+    Table03Analysis.create_summary_stat_table_for_data(panelB, UPDATED=UPDATED)    
+    Table03Analysis.plot_figure02(ratio_dataset, panelA, UPDATED=True)
+    #Table03Analysis.plot_figure02(ratio_dataset, UPDATED=UPDATED)
+    # Generate Figure 3 using standardized data for both financial ratios and macro variables
+    Table03Analysis.plot_figure03(ratio_dataset, macro_dataset, UPDATED=UPDATED)
+    correlation_panelA = calculate_correlation_panelA(panelA)
+    correlation_panelB = calculate_correlation_panelB(panelB)
+    formatted_table = format_final_table(correlation_panelA, correlation_panelB)
+    convert_and_export_tables_to_latex(correlation_panelA, correlation_panelB, UPDATED=UPDATED)
+    print(formatted_table.style.format(na_rep=''))
     
-#     Table03Analysis.plot_figure02(ratio_dataset, recession_periods, correlations, UPDATED=True)
-#     #Table03Analysis.plot_figure02(ratio_dataset, UPDATED=UPDATED)
-#     # Generate Figure 3 using standardized data for both financial ratios and macro variables
-#     Table03Analysis.plot_figure03(ratio_dataset, macro_dataset, UPDATED=UPDATED)
-#     correlation_panelA = calculate_correlation_panelA(panelA)
-#     correlation_panelB = calculate_correlation_panelB(panelB)
-#     formatted_table = format_final_table(correlation_panelA, correlation_panelB)
-#     convert_and_export_tables_to_latex(correlation_panelA, correlation_panelB, UPDATED=UPDATED)
-#     print(formatted_table.style.format(na_rep=''))
-    
-# if __name__ == "__main__":
-#     main(UPDATED=False)
-#     print("Table 03 has been created and exported to LaTeX format.")
+if __name__ == "__main__":
+    main(UPDATED=False)
+    print("Table 03 has been created and exported to LaTeX format.")

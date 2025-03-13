@@ -21,6 +21,35 @@ import numpy as np
 import Table02Analysis
 from pathlib import Path
 
+
+
+def clean_primary_dealers_data(fname):
+    file_path = config.MANUAL_DATA / fname
+    prim_dealers = pd.read_csv(file_path)
+
+    prim_dealers['End Date'] = prim_dealers['End Date'].fillna('Current')
+
+    prim_dealers = prim_dealers.dropna(subset=['gvkey'])
+    prim_dealers['gvkey'] = prim_dealers['gvkey'].astype(int)
+
+    date_cols = ['Start Date', 'End Date']
+    for col in date_cols:
+        prim_dealers[col] = pd.to_datetime(prim_dealers[col], errors='coerce')
+        prim_dealers[col] = prim_dealers[col].dt.strftime('%m/%d/%Y')
+
+    prim_dealers['End Date'] = prim_dealers['End Date'].fillna('Current')
+    if 'Unnamed: 0' in prim_dealers.columns:
+        prim_dealers = prim_dealers.drop(columns=['Unnamed: 0'])
+
+    return prim_dealers
+
+
+def load_link_table(fname):
+
+    file_path = config.MANUAL_DATA / fname
+    link_hist = pd.read_csv(file_path)
+    return link_hist
+
 #---------------------------------------------------------------------
 # Function: fetch_financial_data
 # Description: Fetches quarterly financial data (assets, debt, equity, etc.) from WRDS for given gvkeys.
@@ -145,14 +174,14 @@ def pull_CRSP_Comp_Link_Table():
 # Description: Merges manually read ticks.csv info with link_hist. 
 # If UPDATED=False, restrict link_hist to fyear <= 2012.
 #---------------------------------------------------------------------
-def prim_deal_merge_manual_data_w_linktable(UPDATED=False):
-    main_dataset, link_hist = read_in_manual_datasets()
-    if not UPDATED:
-        link_hist = link_hist[link_hist['fyear'] <= 2012]
-    merged_main = pd.merge(main_dataset, link_hist, left_on='gvkey', right_on='GVKEY')
-    merged_main = merged_main[['gvkey','conm','sic','Start Date','End Date']].drop_duplicates()
-    link_hist.rename(columns={'GVKEY':'gvkey'}, inplace=True)
-    return merged_main, link_hist
+# def prim_deal_merge_manual_data_w_linktable(UPDATED=False):
+#     main_dataset, link_hist = read_in_manual_datasets()
+#     if not UPDATED:
+#         link_hist = link_hist[link_hist['fyear'] <= 2012]
+#     merged_main = pd.merge(main_dataset, link_hist, left_on='gvkey', right_on='GVKEY')
+#     merged_main = merged_main[['gvkey','conm','sic','Start Date','End Date']].drop_duplicates()
+#     link_hist.rename(columns={'GVKEY':'gvkey'}, inplace=True)
+#     return merged_main, link_hist
 
 #---------------------------------------------------------------------
 # Function: create_comparison_group_linktables
@@ -354,7 +383,9 @@ def convert_and_export_table_to_latex(formatted_table, UPDATED=False):
 #---------------------------------------------------------------------
 def main(UPDATED=False):
     db = wrds.Connection(wrds_username=config.WRDS_USERNAME)
-    merged_main, link_hist = prim_deal_merge_manual_data_w_linktable(UPDATED=UPDATED)
+    #merged_main, link_hist = prim_deal_merge_manual_data_w_linktable(UPDATED=UPDATED)
+    merged_main = clean_primary_dealers_data(fname='Primary_Dealer_Link_Table3.csv')
+    link_hist = load_link_table(fname='updated_linktable.csv')
     group_links = create_comparison_group_linktables(link_hist, merged_main)
 
     ds = pull_data_for_all_comparison_groups(db, group_links, UPDATED=UPDATED)

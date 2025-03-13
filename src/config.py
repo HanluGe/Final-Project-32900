@@ -13,18 +13,11 @@ https://pypi.org/project/python-decouple/
 from decouple import config
 from pathlib import Path
 
-# BASE_DIR points one level above this script, assuming config.py is under src/
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-# Retrieve WRDS_USERNAME from .env or default to an empty string
 WRDS_USERNAME = config("WRDS_USERNAME", default="")
-
-# If DATA_DIR is not defined in .env, default to your_project/my_data
+MANUAL_DATA = config('MANUAL_DATA', default=(BASE_DIR / 'data_manual'), cast=Path)
 DATA_DIR = config('DATA_DIR', default=(BASE_DIR / 'my_data'), cast=Path)
-# If OUTPUT_DIR is not defined in .env, default to your_project/my_output
 OUTPUT_DIR = config('OUTPUT_DIR', default=(BASE_DIR / 'my_output'), cast=Path)
-
-# Optionally retrieve date configurations from .env
 START_DATE = config('START_DATE', default='1960-01-01')
 END_DATE = config('END_DATE', default='2012-12-31')
 UPDATED_END_DATE = config('UPDATED_END_DATE', default='2025-01-01')
