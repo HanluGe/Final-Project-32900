@@ -1,3 +1,5 @@
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
 import pandas as pd
 import config
 from datetime import datetime
@@ -118,7 +120,8 @@ def fetch_data_for_tickers(ticks, db):
             ticker = row['Ticker'] if 'Ticker' in row else str(gvkey)
             empty_tickers.append({ticker: gvkey})
         else:
-            prim_dealers = pd.concat([prim_dealers, new_data], axis=0)
+            if not new_data.empty:
+                prim_dealers = pd.concat([prim_dealers, new_data], axis=0)
     
     return prim_dealers, empty_tickers
 
@@ -132,10 +135,7 @@ def load_macro_data(from_cache):
     macro_data = load_fred_macro_data(from_cache= from_cache) 
     macro_data = macro_data.rename(columns={'UNRATE': 'unemp_rate', 
                                               'NFCI': 'nfci', 
-                                              'GDPC1': 'real_gdp', 
-                                              'A191RL1Q225SBEA': 'real_gdp_growth',
-                                              'A191RO1Q156NBEA': 'real_gdp_growth_qoq',
-                                              'A191RP1Q027SBEA': 'real_gdp_growth_yoy'
+                                              'GDPC1': 'real_gdp'
                                               })
     return macro_data
 
@@ -150,7 +150,7 @@ def load_bd_financials():
     bd_financials = bd_financials.rename(columns={'BOGZ1FL664090005Q': 'bd_fin_assets',
                                                   'BOGZ1FL664190005Q': 'bd_liabilities'})
     bd_financials.index = pd.to_datetime(bd_financials.index)
-    bd_financials = bd_financials.resample('Q').last()
+    bd_financials = bd_financials.resample('QE').last()
     bd_financials.index.name = 'datafqtr'
     return bd_financials
 

@@ -5,6 +5,8 @@ This file relies on config.py for paths and src/ modules such as:
 Table02Prep.py, Table03.py, Table03Load.py, Table03Analysis.py, etc.
 It runs Table 2 and Table 3 data fetch, processing, and testing.
 """
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 import os
 from pathlib import Path

@@ -6,12 +6,16 @@ fetches WRDS data for primary dealers and comparison groups, aggregates the data
 LaTeX output. This file no longer contains testing code; see Table02_testing.py for relevant tests.
 """
 
+# import warnings
+# warnings.filterwarnings(
+#     "ignore",
+#     message=".*DataFrame concatenation with empty or all-NA entries.*",
+#     category=FutureWarning
+# )
 import warnings
-warnings.filterwarnings(
-    "ignore",
-    message=".*DataFrame concatenation with empty or all-NA entries.*",
-    category=FutureWarning
-)
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+
 import pandas as pd
 import wrds
 import config
@@ -99,7 +103,7 @@ def fetch_financial_data(db, linktable, start_date, end_date, ITERATE=False):
               AND consol='C'
             """
             data = db.raw_sql(query)
-            if not data.empty:
+            if not data.empty and data.dropna(how="all").shape[1] > 0:
                 results = pd.concat([results, data], axis=0)
     else:
         pgvkey_str = ','.join([f"'{str(key).zfill(6)}'" for key in pgvkeys])
@@ -118,7 +122,7 @@ def fetch_financial_data(db, linktable, start_date, end_date, ITERATE=False):
           AND consol='C'
         """
         data = db.raw_sql(query)
-        if not data.empty:
+        if not data.empty and data.dropna(how="all").shape[1] > 0:
             results = pd.concat([results, data], axis=0)
 
     return results

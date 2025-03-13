@@ -8,6 +8,8 @@ these ratios into analytical factors. It then merges these results with macroeco
 variables to produce outputs (tables and figures) for Table 03 in the intermediary asset 
 pricing replication.
 """
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 import pandas as pd
 import wrds
@@ -211,19 +213,16 @@ def macro_variables(db, from_cache=True, UPDATED=False):
     macro_data = Table03Load.load_fred_macro_data(from_cache = from_cache)
     macro_data = macro_data.rename(columns={'UNRATE': 'unemp_rate',
                                               'NFCI': 'nfci',
-                                              'GDPC1': 'real_gdp',
-                                              'A191RL1Q225SBEA': 'real_gdp_growth',
-                                              'A191RO1Q156NBEA': 'real_gdp_growth_qoq',
-                                              'A191RP1Q027SBEA': 'real_gdp_growth_yoy'})
+                                              'GDPC1': 'real_gdp'})
     macro_data.index = pd.to_datetime(macro_data.index)
     macro_data.rename(columns={'DATE': 'date'}, inplace=True)
-    macro_quarterly = macro_data.resample('Q').mean()
+    macro_quarterly = macro_data.resample('QE').mean()
     macro_quarterly['real_gdp_growth_calc'] = macro_quarterly['real_gdp'].pct_change(periods=1)
 
     # Load Shiller market data, calculate E/P, and resample quarterly
     shiller_cape = Table03Load.load_shiller_pe(from_cache = from_cache)
     shiller_ep = calculate_ep(shiller_cape)
-    shiller_quarterly = shiller_ep.resample('Q').mean()
+    shiller_quarterly = shiller_ep.resample('QE').mean()
 
     # Determine the end date for FF factors based on the UPDATED flag and load the data
     if UPDATED:
@@ -232,7 +231,7 @@ def macro_variables(db, from_cache=True, UPDATED=False):
         end_date_ff = config.END_DATE
     ff_facs = Table03Load.fetch_ff_factors(start_date=config.START_DATE.replace("-", ""),
                                            end_date=end_date_ff.replace("-", ""))
-    ff_facs_quarterly = ff_facs.to_timestamp(freq='M').resample('Q').last()
+    ff_facs_quarterly = ff_facs.to_timestamp(freq='M').resample('QE').last()
 
     # Load the CRSP value-weighted index data and convert the date column to datetime
     value_wtd_indx = Table03Load.pull_CRSP_Value_Weighted_Index(db)
@@ -240,9 +239,8 @@ def macro_variables(db, from_cache=True, UPDATED=False):
     
     # Compute market volatility using logarithmic returns:
     # Assume vwretd is a return (in decimal form), then the log return is ln(1 + vwretd)
-    #log_returns = np.log(1 + value_wtd_indx.set_index('date')['vwretd'])
     log_returns = value_wtd_indx.set_index('date')['vwretd']
-    annual_vol_quarterly = log_returns.groupby(pd.Grouper(freq='Q')).std().rename('mkt_vol')
+    annual_vol_quarterly = log_returns.groupby(pd.Grouper(freq='QE')).std().rename('mkt_vol')
 
     # Merge all macroeconomic data
     macro_merged = shiller_quarterly.merge(macro_quarterly, left_index=True, right_index=True, how='left')
@@ -257,27 +255,24 @@ def create_panelA(ratios, macro):
     Input: ratios (DataFrame with financial ratios) and macro (DataFrame with macro data).
     Output: A DataFrame for Panel A with columns for Market capital, Book capital, AEM leverage, and selected macro variables.
     This panel includes data from 1970-01-01 onward.
-    """
+    """ 
     ratios_renamed = ratios.rename(columns={
         'market_cap_ratio': 'Market capital',
         'book_cap_ratio': 'Book capital',
         'aem_leverage': 'AEM leverage'
     })
-    macro = macro[['e/p', 'unemp_rate', 'nfci', 'real_gdp_growth', 'real_gdp_growth_qoq', 'real_gdp_growth_yoy', 'real_gdp_growth_calc', 'mkt_ret', 'mkt_vol']]
+    macro = macro[['e/p', 'unemp_rate', 'nfci', 'real_gdp_growth_calc', 'mkt_ret', 'mkt_vol']]
     macro_renamed = macro.rename(columns={
         'e/p': 'E/P',
         'unemp_rate': 'Unemployment',
         'nfci': 'Financial conditions',
-        'real_gdp_growth': 'GDP',
-        'real_gdp_growth_qoq': 'GDP1',
-        'real_gdp_growth_yoy': 'GDP2',
-        'real_gdp_growth_calc': 'GDP3',
+        'real_gdp_growth_calc': 'GDP',
         'mkt_ret': 'Market excess return',
         'mkt_vol': 'Market volatility'
     })
     panelA = ratios_renamed.merge(macro_renamed, left_index=True, right_index=True)
     ordered_columns = ['Market capital', 'Book capital', 'AEM leverage',
-                       'E/P', 'Unemployment', 'Financial conditions', 'GDP','GDP1','GDP2','GDP3', 'Market excess return', 'Market volatility']
+                       'E/P', 'Unemployment', 'Financial conditions', 'GDP', 'Market excess return', 'Market volatility']
     panelA = panelA[ordered_columns]
     panelA = panelA.loc['1970-01-01':]
     return panelA
@@ -294,7 +289,7 @@ def create_panelB(factors, macro):
         'book_capital_factor': 'Book capital factor',
         'aem_leverage_factor': 'AEM leverage factor'
     })
-    macro_growth = np.log(macro / macro.shift(1))
+    macro_growth = np.log((macro / macro.shift(1).replace(0, np.nan)).replace(0, np.nan))
     macro_growth = macro_growth.fillna(0)
     macro_growth = macro_growth.loc['1970-01-01':]
     macro_growth['mkt_ret'] = macro['mkt_ret']
@@ -333,7 +328,7 @@ def calculate_correlation_panelA(panelA,UPDATED=False):
         panelA = panelA[:config.END_DATE]
     correlation_panelA = format_correlation_matrix(panelA.iloc[:, :3].corr())
     main_cols = panelA[['Market capital', 'Book capital', 'AEM leverage']]
-    other_cols = panelA[['E/P', 'Unemployment', 'GDP', 'GDP1', 'GDP2','GDP3', 'Financial conditions', 'Market volatility']]
+    other_cols = panelA[['E/P', 'Unemployment', 'GDP', 'Financial conditions', 'Market volatility']]
     correlation_results_panelA = pd.DataFrame(index=main_cols.columns)
     for column in other_cols.columns:
         correlation_results_panelA[column] = main_cols.corrwith(other_cols[column])
@@ -435,12 +430,12 @@ def main(UPDATED=False):
     panelA = create_panelA(ratio_dataset, macro_dataset)
     panelB = create_panelB(factors_dataset, macro_dataset)
     Table03Analysis.create_summary_stat_table_for_data(panelB, UPDATED=UPDATED)    
-    Table03Analysis.plot_figure02(ratio_dataset, panelA, UPDATED=True)
     #Table03Analysis.plot_figure02(ratio_dataset, UPDATED=UPDATED)
     # Generate Figure 3 using standardized data for both financial ratios and macro variables
     Table03Analysis.plot_figure03(ratio_dataset, macro_dataset, UPDATED=UPDATED)
     correlation_panelA = calculate_correlation_panelA(panelA)
     correlation_panelB = calculate_correlation_panelB(panelB)
+    Table03Analysis.plot_figure02(ratio_dataset, correlation_panelA, UPDATED=True)
     formatted_table = format_final_table(correlation_panelA, correlation_panelB)
     convert_and_export_tables_to_latex(correlation_panelA, correlation_panelB, UPDATED=UPDATED)
     print(formatted_table.style.format(na_rep=''))

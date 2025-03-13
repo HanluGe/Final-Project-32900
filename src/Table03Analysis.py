@@ -8,6 +8,8 @@ and several figures, including:
 - Figure 2: Original levels of financial ratios (market cap ratio, book capital ratio, and AEM leverage).
 - Figure 3: Combined plots of standardized financial ratios and macroeconomic variables.
 """
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 import pandas as pd
 import matplotlib.pyplot as plt

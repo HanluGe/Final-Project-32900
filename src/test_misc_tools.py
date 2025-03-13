@@ -1,3 +1,5 @@
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
 import pandas as pd
 from misc_tools import (
     weighted_average,

@@ -10,6 +10,9 @@ It verifies that:
 The tests are modeled after the Table02_testing.py tests.
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import unittest
 import os
 import re
