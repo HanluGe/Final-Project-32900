@@ -56,12 +56,12 @@ The paper argues that capital shocks to financial intermediaries can explain cro
 ## Work Division
 
 - **Liu Junyuan:**  
-  - Modified the primary dealer list and updated `ticks.csv` based on real data sources.
   - Developed the code for auto-generating the LaTeX summary document.
   - Worked on replicating additional tables and figures from the paper.
   - Enhanced table analysis scripts and improved the README file.
 
 - **Hanlu Ge:**  
+  - Modified the primary dealer list and updated `ticks.csv` based on real data sources.
   - Developed the Jupyter Notebook showcasing data processing, ratio calculations, table generation, and analysis.
   - Implemented the automation script (`dodo.py`) and wrote tests to ensure accurate replication of the tables.
 
