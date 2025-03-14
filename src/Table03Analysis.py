@@ -111,31 +111,31 @@ def plot_figure02(ratios, correlation_panelA, UPDATED=False):
     
     Inputs:
     - ratios: DataFrame with columns 'market_cap_ratio', 'book_cap_ratio', 'aem_leverage'.
-    - recession_periods: List of tuples [(start1, end1), (start2, end2), ...] marking recession periods.
-    - correlations: Dict with correlation values, e.g. {"Market_AEM": 0.42, "Market_Book": 0.50, "AEM_Book": -0.07}
-    - UPDATED: Boolean, if True, saves the file with "updated_table03_figure.png".
+    - correlation_panelA: Correlation matrix for Panel A used for annotations.
+    - UPDATED: Boolean flag to determine file naming.
     
-    Output: Saves a PNG file to OUTPUT_DIR and displays the plot.
+    Output: Saves a PNG file to OUTPUT_DIR.
     """
-    correlations = {"Market_AEM": round(correlation_panelA["AEM leverage"]["Market capital"], 2), "Market_Book": round(correlation_panelA["Book capital"]["Market capital"], 2), "AEM_Book": round(correlation_panelA["AEM leverage"]["Book capital"], 2)}
+    correlations = {"Market_AEM": round(correlation_panelA["AEM leverage"]["Market capital"], 2),
+                    "Market_Book": round(correlation_panelA["Book capital"]["Market capital"], 2),
+                    "AEM_Book": round(correlation_panelA["AEM leverage"]["Book capital"], 2)}
 
     recession_periods = [(datetime(1973, 11, 1), datetime(1975, 3, 1)),
-                     (datetime(1980, 1, 1), datetime(1980, 7, 1)),
-                     (datetime(1981, 7, 1), datetime(1982, 11, 1)),
-                     (datetime(1990, 7, 1), datetime(1991, 3, 1)),
-                     (datetime(2001, 3, 1), datetime(2001, 11, 1)),
-                     (datetime(2007, 12, 1), datetime(2009, 6, 1))]
-    
+                         (datetime(1980, 1, 1), datetime(1980, 7, 1)),
+                         (datetime(1981, 7, 1), datetime(1982, 11, 1)),
+                         (datetime(1990, 7, 1), datetime(1991, 3, 1)),
+                         (datetime(2001, 3, 1), datetime(2001, 11, 1)),
+                         (datetime(2007, 12, 1), datetime(2009, 6, 1))]
+
     fig, ax = plt.subplots(figsize=(12, 7))
 
     ax.plot(ratios.index, ratios['market_cap_ratio'] * 100, label='Market Capital Ratio', color='blue', linestyle='-')
     ax.plot(ratios.index, ratios['book_cap_ratio'] * 100, label='Book Capital Ratio', color='green', linestyle='dotted')
     ax.plot(ratios.index, ratios['aem_leverage'] * 100, label='AEM Leverage Ratio', color='orange', linestyle='--')
-    
+
     ax.xaxis.set_major_locator(mdates.YearLocator(10))
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
     ax.set_xlabel('Date')
-
     ax.set_yscale('log')
     ax.set_yticks([5, 10, 50, 100])
     ax.get_yaxis().set_major_formatter(ticker.ScalarFormatter())
@@ -158,26 +158,22 @@ def plot_figure02(ratios, correlation_panelA, UPDATED=False):
 
     ax.annotate('AEM Leverage Ratio', xy=(peak_aem_idx, ratios.loc[peak_aem_idx, 'aem_leverage'] * 100),
                 xytext=(-40, 15), textcoords='offset points',
-                arrowprops=arrow_style,
-                fontsize=10)
+                arrowprops=arrow_style, fontsize=10)
 
     ax.annotate('Market Capital Ratio, %', xy=(peak_market_idx, ratios.loc[peak_market_idx, 'market_cap_ratio'] * 100),
                 xytext=(-40, -25), textcoords='offset points',
-                arrowprops=arrow_style,
-                fontsize=10)
+                arrowprops=arrow_style, fontsize=10)
 
     ax.annotate('Book Capital Ratio, %', xy=(last_valid_index, ratios.loc[last_valid_index, 'book_cap_ratio'] * 100),
                 xytext=(-40, -15), textcoords='offset points',
-                arrowprops=arrow_style,
-                fontsize=10)
+                arrowprops=arrow_style, fontsize=10)
 
     ax.set_title('AEM Leverage and Intermediary Capital Ratio: Level', fontsize=14)
     ax.legend(loc='best')
 
     outfile = config.OUTPUT_DIR / ("updated_table03_figure.png" if UPDATED else "table03_figure.png")
     plt.savefig(outfile, dpi=300)
-    plt.show()
-
+    plt.close(fig)  # close the figure to avoid repeated display
 
 
 def plot_figure03(ratios, macro, UPDATED=False):

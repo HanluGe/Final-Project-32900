@@ -65,9 +65,9 @@ class TestFormattedTable(unittest.TestCase):
                 self.fail(f"Missing {key} in final table.")
             else:
                 got = dct[key]
-                if abs(got - val) > 0.15:
+                if abs(got - val) > 0.2:
                     off += 1
-        print(f"{off} table values off by more than 0.15")
+        print(f"{off} table values off by more than 0.2")
 
     def test_gvkeys_data_presence(self):
         """

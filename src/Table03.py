@@ -419,27 +419,26 @@ def main(UPDATED=False):
     merges with macro variables, and exports summary statistics, figures, and correlation matrices.
     """
     db = wrds.Connection(wrds_username=config.WRDS_USERNAME)
-    # prim_dealers, _ = Table02Prep.prim_deal_merge_manual_data_w_linktable(UPDATED=UPDATED)
     prim_dealers = Table02Prep.clean_primary_dealers_data(fname='Primary_Dealer_Link_Table3.csv')
     dataset, _ = Table03Load.fetch_data_for_tickers(prim_dealers, db)
-    # Use the local prep_dataset defined in Table03.py (not in Table03Analysis)
     prep_datast = prep_dataset(dataset, UPDATED=UPDATED)
     ratio_dataset = aggregate_ratios(prep_datast)
     factors_dataset = convert_ratios_to_factors(ratio_dataset)
     macro_dataset = macro_variables(db, UPDATED=UPDATED)
     panelA = create_panelA(ratio_dataset, macro_dataset)
     panelB = create_panelB(factors_dataset, macro_dataset)
-    Table03Analysis.create_summary_stat_table_for_data(panelB, UPDATED=UPDATED)    
-    #Table03Analysis.plot_figure02(ratio_dataset, UPDATED=UPDATED)
-    # Generate Figure 3 using standardized data for both financial ratios and macro variables
+    
+    Table03Analysis.create_summary_stat_table_for_data(panelB, UPDATED=UPDATED)
     Table03Analysis.plot_figure03(ratio_dataset, macro_dataset, UPDATED=UPDATED)
+    Table03Analysis.plot_figure02(ratio_dataset, calculate_correlation_panelA(panelA), UPDATED=UPDATED)
+    
     correlation_panelA = calculate_correlation_panelA(panelA)
     correlation_panelB = calculate_correlation_panelB(panelB)
-    Table03Analysis.plot_figure02(ratio_dataset, correlation_panelA, UPDATED=True)
     formatted_table = format_final_table(correlation_panelA, correlation_panelB)
     convert_and_export_tables_to_latex(correlation_panelA, correlation_panelB, UPDATED=UPDATED)
     print(formatted_table.style.format(na_rep=''))
-    
+
+
 if __name__ == "__main__":
     main(UPDATED=False)
     print("Table 03 has been created and exported to LaTeX format.")

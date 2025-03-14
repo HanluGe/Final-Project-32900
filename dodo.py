@@ -5,13 +5,14 @@ This file relies on config.py for paths and src/ modules such as:
 Table02Prep.py, Table03.py, Table03Load.py, Table03Analysis.py, etc.
 It runs Table 2 and Table 3 data fetch, processing, and testing.
 """
+
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 import os
 from pathlib import Path
-import warnings
 import subprocess
+import shutil
 
 from src import config
 warnings.filterwarnings("ignore")
@@ -116,6 +117,33 @@ def task_pull_fred_data():
 
     return {
         'actions': [pull_fred_past, pull_shiller_pe],
+        'verbosity': 2,
+    }
+
+def task_run_notebook():
+    """
+    Executes FinalCombinedWalkthrough.ipynb in the src directory.
+    The executed notebook is saved in config.OUTPUT_DIR and the src notebook is cleared of outputs.
+    """
+    original_dir = os.getcwd()
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    src_dir = os.path.join(current_dir, "src")
+    notebook_file = "FinalCombinedWalkthrough.ipynb"
+    # Path for the executed notebook in the _output folder
+    executed_notebook = Path(config.OUTPUT_DIR) / "FinalCombinedWalkthrough_executed.ipynb"
+
+    def run_notebook():
+        os.chdir(src_dir)
+        # Clear outputs in the src notebook in place using nbconvert
+        cmd_clear = f'jupyter nbconvert --ClearOutputPreprocessor.enabled=True --inplace "{notebook_file}"'
+        subprocess.check_call(cmd_clear, shell=True)
+        # Execute the cleared notebook and save the executed version in _output folder
+        cmd_execute = f'jupyter nbconvert --to notebook --execute "{notebook_file}" --output "{executed_notebook}"'
+        subprocess.check_call(cmd_execute, shell=True)
+        os.chdir(original_dir)
+
+    return {
+        'actions': [run_notebook],
         'verbosity': 2,
     }
 
