@@ -85,7 +85,12 @@ Regular and transparent communication was maintained throughout the project to e
    ```bash
    pip install -r requirements.txt
 
-4. **Run the Project:**
+4. **Configure .env File:**
+
+  Ensure you have an .env file (or rename .env.example to .env).
+  Inside .env, specify the paths for DATA_DIR and OUTPUT_DIR so that the scripts can locate input data and store all generated output files correctly.
+
+5. **Run the Project:**
    ```bash
    set PYTHONWARNINGS=ignore::FutureWarning
    doit

@@ -47,16 +47,21 @@ def create_summary_stat_table_for_data(datasets, UPDATED=False):
     than for other measures as shown in the count rows.
     There are also some negatives for book equity.
     """
+    # Generate LaTeX
     latex = summary_df.to_latex(
         index=True,
         multirow=True,
         multicolumn=True,
-        escape=False,
+        escape=False,  # We do our own manual underscore escaping
         float_format="%.2f",
         caption=cap,
         label='tab:Table 2.1'
     )
+    # Remove any weird multirow commands if they appear
     latex = latex.replace(r'\multirow[t]{5}{*}', '')
+
+    # Manually escape underscores
+    latex = latex.replace("_", r"\_")
 
     if UPDATED:
         out = config.OUTPUT_DIR / "updated_table02_sstable.tex"
@@ -89,7 +94,7 @@ def create_figure_for_data(ratio_df, UPDATED=False):
     eqty_cols  = [c for c in ratio_df.columns if 'book_equity' in c]
     mkt_cols   = [c for c in ratio_df.columns if 'market_equity' in c]
 
-    fig, axes = plt.subplots(2,2, figsize=(12,8), sharex=True)
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True)
     cat_map = [
        ('Total_assets', asset_cols),
        ('Book_debt',   debt_cols),
@@ -114,9 +119,9 @@ def create_figure_for_data(ratio_df, UPDATED=False):
         figpath = config.OUTPUT_DIR / "updated_table02_figure.png"
     else:
         figpath = config.OUTPUT_DIR / "table02_figure.png"
-        
+
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    
+
     plt.savefig(figpath, bbox_inches='tight')
     plt.close(fig)
     print(f"Figure saved to: {figpath}")
@@ -126,7 +131,7 @@ def create_corr_matrix_for_data(datasets, UPDATED=False):
     """
     Builds correlation matrices for each metric (total_assets, book_debt, book_equity, market_equity)
     across PD, BD, Banks, Cmpust.
-    The result is saved as a LaTeX file in config.OUTPUT_DIR.
+    The result is saved as a LaTeX file in config.OUTPUT_DIR, with underscores escaped.
     """
     group_order = ['PD','BD','Banks','Cmpust.']
     metrics = ['total_assets','book_debt','book_equity','market_equity']
@@ -157,11 +162,18 @@ def create_corr_matrix_for_data(datasets, UPDATED=False):
             continue
 
         corr = combined_df.corr()
+
+        # Escape underscores in the metric name for the caption
+        escaped_m = m.replace("_", r"\_")
         c_latex = corr.to_latex(
             float_format="%.3f",
-            caption=f"Correlation of {m} across PD, BD, Banks, Cmpust.",
-            label=f"tab:{m}"
+            caption=f"Correlation of {escaped_m} across PD, BD, Banks, Cmpust.",
+            label=f"tab:{m}",
+            escape=False  # We'll manually replace underscores next
         )
+        # Now manually escape underscores in the final string
+        c_latex = c_latex.replace("_", r"\_")
+
         all_latex.append(c_latex)
 
     final_txt = "\n\n".join(all_latex)
@@ -169,7 +181,7 @@ def create_corr_matrix_for_data(datasets, UPDATED=False):
         out = config.OUTPUT_DIR / "updated_table02_corr.tex"
     else:
         out = config.OUTPUT_DIR / "table02_corr.tex"
-        
+
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     with open(out, 'w', encoding='utf-8') as f:
