@@ -49,7 +49,7 @@ The paper argues that capital shocks to financial intermediaries can explain cro
   Unit tests for both Table 2 and Table 3 have been developed to ensure the replication results closely match the original paper.
 
 - **Additional Files:**  
-  The repository also includes supplementary files such as a README, an environment example file (`.env.example`), and other auxiliary scripts to ensure a clear and rigorous project process.
+  The repository also includes supplementary files such as a README, an environment example file (`.env.example`), and other auxiliary scripts to ensure a clear and rigorous project process.(If you want to clone our repository, please ensure you have an .env file (or rename .env.example to .env) and specify the paths for DATA_DIR and OUTPUT_DIR so that the scripts can locate input data and store all generated output files correctly.)
 
 ---
 
@@ -85,12 +85,7 @@ Regular and transparent communication was maintained throughout the project to e
    ```bash
    pip install -r requirements.txt
 
-4. **Configure .env File:**
-
-  Ensure you have an .env file (or rename .env.example to .env).
-  Inside .env, specify the paths for DATA_DIR and OUTPUT_DIR so that the scripts can locate input data and store all generated output files correctly.
-
-5. **Run the Project:**
+4. **Run the Project:**
    ```bash
    set PYTHONWARNINGS=ignore::FutureWarning
    doit
